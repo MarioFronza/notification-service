@@ -1,4 +1,4 @@
-package com.github.plugins
+package com.github.infra.http.ktor.plugins
 
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*

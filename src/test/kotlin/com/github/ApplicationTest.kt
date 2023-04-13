@@ -1,5 +1,6 @@
 package com.github
 
+import com.github.infra.http.ktor.plugins.configureRouting
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.server.testing.*
