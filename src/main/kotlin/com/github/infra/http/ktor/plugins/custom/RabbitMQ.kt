@@ -9,9 +9,13 @@ class RabbitMQ {
 
     companion object Feature : BaseApplicationPlugin<Application, RabbitConfig, RabbitMQInstance> {
 
+        // Key used to store and retrieve the RabbitMQ instance in the application attributes.
         val RabbitMQKey = AttributeKey<RabbitMQInstance>("RabbitMQ")
         override val key = RabbitMQKey
 
+        // Installs the RabbitMQ feature in the pipeline and configures it with the provided configuration.
+        // If no RabbitMQ instance is provided in the configuration, creates a new instance using RabbitConfig.create()
+        // and initializes it. Stores the instance in the application attributes with the RabbitMQKey.
         override fun install(pipeline: Application, configure: RabbitConfig.() -> Unit): RabbitMQInstance {
             val config = RabbitConfig.create()
             config.apply(configure)

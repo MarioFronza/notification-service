@@ -1,51 +1,42 @@
 package com.github.infra.ampq.rabbit
 
 import com.github.infra.http.ktor.plugins.custom.RabbitMQ
-import com.rabbitmq.client.AMQP
-import com.rabbitmq.client.Channel
-import com.rabbitmq.client.Delivery
+import com.github.infra.serialization.deserialize
 import io.ktor.server.application.*
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 
+
+// Extension function to register a RabbitMQ consumer
 fun Application.rabbitConsumer(configuration: RabbitMQInstance.() -> Unit): RabbitMQInstance =
     plugin(RabbitMQ).apply(configuration)
 
-fun RabbitMQInstance.publish(exchange: String, routingKey: String, props: AMQP.BasicProperties? = null, body: String) {
+// Extension function to publish a message to a RabbitMQ exchange
+fun ApplicationCall.publish(exchange: String, routingKey: String, body: String) {
+    application.attributes[RabbitMQ.RabbitMQKey].publish(exchange, routingKey, body)
+}
+
+// Extension function to publish a message to a RabbitMQ exchange using a specific instance
+fun RabbitMQInstance.publish(exchange: String, routingKey: String, body: String) {
+    // Creates a channel and sends the message
     withChannel {
-        basicPublish(exchange, routingKey, props, body.toByteArray())
+        basicPublish(exchange, routingKey, null, body.toByteArray())
     }
 }
 
-fun ApplicationCall.publish(exchange: String, routingKey: String, props: AMQP.BasicProperties? = null, body: String) {
-    application.attributes[RabbitMQ.RabbitMQKey].publish(exchange, routingKey, props, body)
-}
-
+// Extension function to consume messages from a RabbitMQ queue
 inline fun <reified T> RabbitMQInstance.consume(
     queue: String,
-    autoAck: Boolean = true,
-    crossinline rabbitDeliverCallback: ConsumerScope.(body: T) -> Unit,
+    crossinline rabbitDeliverCallback: (body: T) -> Unit,
 ) {
+    // Creates a channel and starts consuming messages from the specified queue
     withChannel {
         basicConsume(
             queue,
-            autoAck,
-            { consumerTag, message ->
+            true,
+            { _, message ->
+                // Converts the message body to the specified type and invokes the callback
                 runCatching {
-                    val mappedEntity = Json.decodeFromString<T>(message.body.decodeToString())
-
-                    val scope = ConsumerScope(
-                        channel = this,
-                        message = message
-                    )
-
-                    rabbitDeliverCallback.invoke(scope, mappedEntity)
-                }.getOrElse {
-                    println(
-                        "DeliverCallback error: (" +
-                                "messageId = ${message.properties.messageId}, " +
-                                "consumerTag = $consumerTag)",
-                    )
+                    val mappedEntity = message.body.decodeToString().deserialize<T>()
+                    rabbitDeliverCallback.invoke(mappedEntity)
                 }
             },
             { consumerTag ->
@@ -55,20 +46,4 @@ inline fun <reified T> RabbitMQInstance.consume(
     }
 }
 
-class ConsumerScope(
-    private val channel: Channel,
-    private val message: Delivery,
-) {
 
-    fun ack(multiple: Boolean = false) {
-        channel.basicAck(message.envelope.deliveryTag, multiple)
-    }
-
-    fun nack(multiple: Boolean = false, requeue: Boolean = false) {
-        channel.basicNack(message.envelope.deliveryTag, multiple, requeue)
-    }
-
-    fun reject(requeue: Boolean = false) {
-        channel.basicReject(message.envelope.deliveryTag, requeue)
-    }
-}
